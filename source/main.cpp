@@ -7,7 +7,7 @@ class OverlaySysmodules : public tsl::Overlay {
     ~OverlaySysmodules() {}
 
     void initServices() override {
-        pmshellInitialize();
+        ASSERT_FATAL(pmshellInitialize());
     }
 
     void exitServices() override {
