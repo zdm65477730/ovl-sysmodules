@@ -38,7 +38,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 #   NACP building is skipped as well.
 #---------------------------------------------------------------------------------
 APP_TITLE	:=	ovl-sysmodules
-APP_VERSION	:=	1.2.2
+APP_VERSION	:=	1.3.1
 
 TARGET		:=	$(APP_TITLE)
 BUILD		:=	build
