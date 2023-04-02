@@ -681,10 +681,12 @@ Result GuiMain::CopyFile(const char *srcPath, const char *destPath) {
 }
 
 void GuiMain::update() {
-    static u32 counter = 0;
+    static u8 counter = 0;
 
     if (counter++ % 20 != 0)
         return;
+    else
+        counter = 0;
 
     if (this->m_sysmodEnabledFlags.sysmodulesControlEnabled) {
         for (const auto &module : this->m_sysmoduleListItems) {
