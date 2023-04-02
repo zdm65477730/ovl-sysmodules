@@ -38,7 +38,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 #   NACP building is skipped as well.
 #---------------------------------------------------------------------------------
 APP_TITLE	:=	ovl-sysmodules
-APP_VERSION	:=	1.3.1
+APP_VERSION	:=	v1.3.1
 
 TARGET		:=	$(APP_TITLE)
 BUILD		:=	build
@@ -60,7 +60,7 @@ ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
 			$(ARCH) $(DEFINES)
 
-CFLAGS	+=	$(INCLUDE) -D__SWITCH__ -DAPPTITLE=\"$(APP_TITLE)\" -DVERSION=\"v$(APP_VERSION)\"
+CFLAGS	+=	$(INCLUDE) -D__SWITCH__ -DAPPTITLE=\"$(APP_TITLE)\" -DVERSION=\"$(APP_VERSION)\"
 
 CXXFLAGS	:= $(CFLAGS) -fexceptions -std=c++20
 
