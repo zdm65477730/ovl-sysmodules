@@ -47,7 +47,7 @@ DATA		:=	data
 INCLUDES	:=	include libs/libtesla/include libs/SimpleIniParser/include libs/SimpleIniParser/include/SimpleIniParser
 
 ifeq ($(RELEASE),)
-	APP_VERSION	:=	$(APP_VERSION)-$(shell git describe --dirty --always)
+	APP_VERSION	:=	$(APP_VERSION)-$(shell git describe --always)
 endif
 
 NO_ICON		:=  1
