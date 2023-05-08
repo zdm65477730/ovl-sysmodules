@@ -1,5 +1,5 @@
 {
-    "PluginName": "系统模块管理",
+    "PluginName": "系统模块",
     "RunAndHasFlagListItemValue": "正在使用 | \uE0F4",
     "RunAndNoFlagListItemValue": "正在使用 | \uE098",
     "NotRunAndHasFlagListItemValue": "未启用 | \uE0F4",
