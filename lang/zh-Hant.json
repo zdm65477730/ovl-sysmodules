@@ -1,5 +1,5 @@
 {
-    "PluginName": "系統模塊管理",
+    "PluginName": "系統模塊",
     "RunAndHasFlagListItemValue": "正在使用 | \uE0F4",
     "RunAndNoFlagListItemValue": "正在使用 | \uE098",
     "NotRunAndHasFlagListItemValue": "未啟用 | \uE0F4",
