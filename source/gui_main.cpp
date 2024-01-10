@@ -149,16 +149,14 @@ GuiMain::GuiMain() {
         }
     )";
     std::string lanPath = std::string("sdmc:/switch/.overlays/lang/") + APPTITLE + "/";
-    fsdevMountSdmc();
-    tsl::hlp::doWithSmSession([&lanPath]{
-        tsl::tr::InitTrans(lanPath, jsonStr);
-    });
-    fsdevUnmountDevice("sdmc");
 
     // Open a service manager session.
     if (R_FAILED(rc = smInitialize())) return;
 
-    if (R_FAILED(rc = nifmInitialize(NifmServiceType_Admin))) return;
+    fsdevMountSdmc();
+    tsl::hlp::doWithSmSession([&lanPath]{
+        tsl::tr::InitTrans(lanPath, jsonStr);
+    });
 
     std::string option;
     if (R_SUCCEEDED(rc = setGetIniConfig("sdmc:/config/" APPTITLE "/config.ini", APPTITLE, "powerControlEnabled", option)))
@@ -220,17 +218,14 @@ GuiMain::GuiMain() {
         FsDir contentDir;
         FsFileSystem fs;
 
-        fsdevMountSdmc();
-
         if (R_FAILED(fsOpenSdCardFileSystem(&fs))) {
-            fsdevUnmountDevice("sdmc");
             return;
         }
-        tsl::hlp::ScopeGuard fsdevGuard1([&] { fsdevUnmountDevice("sdmc"); });
         tsl::hlp::ScopeGuard fsGuard1([&] { fsFsClose(&fs); });
     
-        if (R_FAILED(rc = fsFsOpenDirectory(&fs, pathBuffer, FsDirOpenMode_ReadDirs, &contentDir)))
+        if (R_FAILED(rc = fsFsOpenDirectory(&fs, pathBuffer, FsDirOpenMode_ReadDirs, &contentDir))) {
             return;
+        }
 
         tsl::hlp::ScopeGuard dirGuard([&] { fsDirClose(&contentDir); });
 
@@ -280,7 +275,6 @@ GuiMain::GuiMain() {
                     fsdevUnmountDevice("sdmc");
                     return false;
                 }
-                tsl::hlp::ScopeGuard fsdevGuard1([&] { fsdevUnmountDevice("sdmc"); });
                 tsl::hlp::ScopeGuard fsGuard1([&] { fsFsClose(&fs); });
 
                 /* if the folder "flags" does not exist, it will be created */
@@ -309,6 +303,7 @@ GuiMain::GuiMain() {
                         if (!this->hasFlag(module))
                             fsFsCreateFile(&fs, pathBuffer, 0, FsCreateOption(0));
                     }
+                    fsdevUnmountDevice("sdmc");
                     return true;
                 }
 
@@ -320,19 +315,20 @@ GuiMain::GuiMain() {
                         /* Create boot2 flag file. */
                         fsFsCreateFile(&fs, pathBuffer, 0, FsCreateOption(0));
                     }
+                    fsdevUnmountDevice("sdmc");
                     return true;
                 }
-
+                fsdevUnmountDevice("sdmc");
                 return false;
             });
             this->m_sysmoduleListItems.push_back(std::move(module));
         }
         this->m_scanned = true;
     }
+    fsdevUnmountDevice("sdmc");
 }
 
 GuiMain::~GuiMain() {
-    nifmExit();
     smExit();
 }
 
@@ -386,19 +382,25 @@ tsl::elm::Element *GuiMain::createUI() {
         }), 30);
         this->m_listItemWifiSwitch = new tsl::elm::ListItem("WifiSwitchListItemKey"_tr);
         Result rc;
-        if (R_FAILED(rc = nifmIsWirelessCommunicationEnabled(&this->m_isWifiOn))) {
-            wifiSwitchCatHeader->setText("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
+        if (R_SUCCEEDED(rc = nifmInitialize(NifmServiceType_Admin))) {
+            if (R_FAILED(rc = nifmIsWirelessCommunicationEnabled(&this->m_isWifiOn))) {
+                wifiSwitchCatHeader->setText("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
+            }
+            nifmExit();
         }
         this->m_listItemWifiSwitch->setClickListener([this, wifiSwitchCatHeader](u64 click) -> bool {
             if (click == HidNpadButton_A) {
                 Result rc;
-                if (R_FAILED(rc = nifmIsWirelessCommunicationEnabled(&this->m_isWifiOn))) {
-                    wifiSwitchCatHeader->setText("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
-                } else {
-                    if (R_FAILED(rc = nifmSetWirelessCommunicationEnabled(this->m_isWifiOn = !this->m_isWifiOn))) {
-                        wifiSwitchCatHeader->setText("WifiSwitchSetErrorListItemext"_tr + std::to_string(rc));
+                if (R_SUCCEEDED(rc = nifmInitialize(NifmServiceType_Admin))) {
+                    if (R_FAILED(rc = nifmIsWirelessCommunicationEnabled(&this->m_isWifiOn))) {
+                        wifiSwitchCatHeader->setText("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
+                    } else {
+                        if (R_FAILED(rc = nifmSetWirelessCommunicationEnabled(this->m_isWifiOn = !this->m_isWifiOn))) {
+                            wifiSwitchCatHeader->setText("WifiSwitchSetErrorListItemext"_tr + std::to_string(rc));
+                        }
+                        svcSleepThread(500*1000*1000);
                     }
-                    svcSleepThread(500*1000*1000);
+                    nifmExit();
                 }
                 if (R_FAILED(rc))
                     return false;
@@ -645,14 +647,10 @@ Result GuiMain::setGetIniConfig(std::string iniPath, std::string iniSection, std
     Result ret = 0;
     FsFileSystem fs;
 
-    fsdevMountSdmc();
-
     if (R_FAILED(ret = fsOpenSdCardFileSystem(&fs))) {
-        fsdevUnmountDevice("sdmc");
         return ret;
     }
 
-    tsl::hlp::ScopeGuard fsdevGuard1([&] { fsdevUnmountDevice("sdmc"); });
     tsl::hlp::ScopeGuard fsGuard1([&] { fsFsClose(&fs); });
 
     simpleIniParser::Ini *ini = simpleIniParser::Ini::parseFile(iniPath);
@@ -678,29 +676,36 @@ Result GuiMain::CopyFile(const char *srcPath, const char *destPath) {
     Result ret{0};
     FsFileSystem fs;
 
-    fsdevMountSdmc();
     if (R_FAILED(ret = fsOpenSdCardFileSystem(&fs))) {
-        fsdevUnmountDevice("sdmc");
         return ret;
     }
 
-    tsl::hlp::ScopeGuard fsdevGuard1([&] { fsdevUnmountDevice("sdmc"); });
     tsl::hlp::ScopeGuard fsGuard1([&] { fsFsClose(&fs); });
 
     FsFile src_handle, dest_handle;
-    if (R_FAILED(ret = fsFsOpenFile(&fs, srcPath, FsOpenMode_Read, &src_handle))) return ret;
+    if (R_FAILED(ret = fsFsOpenFile(&fs, srcPath, FsOpenMode_Read, &src_handle))) {
+        return ret;
+    }
     tsl::hlp::ScopeGuard fileGuard1([&] { fsFileClose(&src_handle); });
 
     s64 size = 0;
-    if (R_FAILED(ret = fsFileGetSize(&src_handle, &size))) return ret;
+    if (R_FAILED(ret = fsFileGetSize(&src_handle, &size))) {
+        return ret;
+    }
 
     if (R_SUCCEEDED(fsFsOpenFile(&fs, destPath, FsOpenMode_Read, &dest_handle))) {
         fsFileClose(&dest_handle);
-        if (R_FAILED(ret = fsFsDeleteFile(&fs, destPath))) return ret;
-	    if (R_FAILED(ret = fsFsCreateFile(&fs, destPath, size, 0))) return ret;
+        if (R_FAILED(ret = fsFsDeleteFile(&fs, destPath))) {
+            return ret;
+        }
+	    if (R_FAILED(ret = fsFsCreateFile(&fs, destPath, size, 0))) {
+            return ret;
+        }
     }
 
-    if (R_FAILED(ret = fsFsOpenFile(&fs, destPath, FsOpenMode_Write, &dest_handle))) return ret;
+    if (R_FAILED(ret = fsFsOpenFile(&fs, destPath, FsOpenMode_Write, &dest_handle))) {
+        return ret;
+    }
     tsl::hlp::ScopeGuard fileGuard2([&] { fsFileClose(&dest_handle); });
 
     u64 bytes_read = 0;
@@ -712,8 +717,12 @@ Result GuiMain::CopyFile(const char *srcPath, const char *destPath) {
 
     do {
         std::memset(buf, 0, buf_size);
-        if (R_FAILED(ret = fsFileRead(&src_handle, offset, buf, buf_size, FsReadOption_None, &bytes_read))) return ret;
-        if (R_FAILED(ret = fsFileWrite(&dest_handle, offset, buf, bytes_read, FsWriteOption_Flush))) return ret;
+        if (R_FAILED(ret = fsFileRead(&src_handle, offset, buf, buf_size, FsReadOption_None, &bytes_read))) {
+            return ret;
+        }
+        if (R_FAILED(ret = fsFileWrite(&dest_handle, offset, buf, bytes_read, FsWriteOption_Flush))) {
+            return ret;
+        }
         offset += bytes_read;
     } while(offset < size);
 
@@ -765,14 +774,10 @@ void GuiMain::updateStatus(const SystemModule &module) {
 bool GuiMain::hasFlag(const SystemModule &module) {
     FsFileSystem fs;
 
-    fsdevMountSdmc();
-
     if (R_FAILED(fsOpenSdCardFileSystem(&fs))) {
-        fsdevUnmountDevice("sdmc");
         return false;
     }
 
-    tsl::hlp::ScopeGuard fsdevGuard1([&] { fsdevUnmountDevice("sdmc"); });
     tsl::hlp::ScopeGuard fsGuard1([&] { fsFsClose(&fs); });
 
     FsFile flagFile;
