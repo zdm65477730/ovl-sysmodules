@@ -27,7 +27,6 @@ struct SystemModuleEnabledFlag {
 
 class GuiMain : public tsl::Gui {
   private:
-    FsFileSystem m_fs;
     std::list<SystemModule> m_sysmoduleListItems;
     tsl::elm::ListItem *m_listItemSXOSBootType;
     tsl::elm::ListItem *m_listItemSXGEARBootType;
