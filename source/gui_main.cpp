@@ -368,20 +368,16 @@ tsl::elm::Element *GuiMain::createUI() {
             renderer->drawString("WifiSwitchCustomDrawerText"_tr.c_str(), false, x + 5, y + 20, 15, renderer->a(tsl::style::color::ColorDescription));
         }), 30);
         this->m_listItemWifiSwitch = new tsl::elm::ListItem("WifiSwitchListItemKey"_tr);
-        Result rc;
-        if (R_FAILED(rc = nifmIsWirelessCommunicationEnabled(&this->m_isWifiOn))) {
-            wifiSwitchCatHeader->setText("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
-        }
         this->m_listItemWifiSwitch->setClickListener([this, wifiSwitchCatHeader](u64 click) -> bool {
             if (click == HidNpadButton_A) {
                 Result rc;
-                if (R_FAILED(rc = nifmIsWirelessCommunicationEnabled(&this->m_isWifiOn))) {
+                bool isWifiOn;
+                if (R_FAILED(rc = this->isWifiOn(isWifiOn)))
                     wifiSwitchCatHeader->setText("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
-                } else {
-                    if (R_FAILED(rc = nifmSetWirelessCommunicationEnabled(this->m_isWifiOn = !this->m_isWifiOn))) {
+                else {
+                    if (R_FAILED(rc = nifmSetWirelessCommunicationEnabled(!isWifiOn))) {
                         wifiSwitchCatHeader->setText("WifiSwitchSetErrorListItemext"_tr + std::to_string(rc));
                     }
-                    svcSleepThread(500*1000*1000);
                 }
                 if (R_FAILED(rc))
                     return false;
@@ -704,7 +700,12 @@ void GuiMain::update() {
     }
 
     if (this->m_sysmodEnabledFlags.wifiControlEnabled) {
-        this->m_listItemWifiSwitch->setValue(this->m_isWifiOn ? "RunAndHasFlagListItemValue"_tr : "NotRunAndNoFlagListItemValue"_tr);
+        Result rc;
+        bool isWifiOn;
+        if (R_FAILED(rc = this->isWifiOn(isWifiOn)))
+            this->m_listItemWifiSwitch->setText("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
+        else
+            this->m_listItemWifiSwitch->setValue(isWifiOn ? "RunAndHasFlagListItemValue"_tr : "NotRunAndNoFlagListItemValue"_tr);
     }
 }
 
@@ -743,6 +744,10 @@ bool GuiMain::isRunning(const SystemModule &module) {
     if (R_FAILED(pmdmntGetProcessId(&pid, module.programId)))
         return false;
     return pid > 0;
+}
+
+Result GuiMain::isWifiOn(bool &isWifiOn) {
+    return nifmIsWirelessCommunicationEnabled(&isWifiOn);
 }
 
 #if 0
