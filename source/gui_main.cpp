@@ -160,6 +160,8 @@ GuiMain::GuiMain() {
 
     if (R_FAILED(rc = nifmInitialize(NifmServiceType_Admin))) return;
 
+    if (R_FAILED(rc = fsOpenSdCardFileSystem(&this->m_fs))) return;
+
     std::string option;
     if (R_SUCCEEDED(rc = setGetIniConfig("sdmc:/config/" APPTITLE "/config.ini", APPTITLE, "powerControlEnabled", option)))
         this->m_sysmodEnabledFlags.powerControlEnabled = std::stoi(option);
@@ -218,18 +220,7 @@ GuiMain::GuiMain() {
 
     if (this->m_sysmodEnabledFlags.sysmodulesControlEnabled) {
         FsDir contentDir;
-        FsFileSystem fs;
-
-        fsdevMountSdmc();
-
-        if (R_FAILED(fsOpenSdCardFileSystem(&fs))) {
-            fsdevUnmountDevice("sdmc");
-            return;
-        }
-        tsl::hlp::ScopeGuard fsdevGuard1([&] { fsdevUnmountDevice("sdmc"); });
-        tsl::hlp::ScopeGuard fsGuard1([&] { fsFsClose(&fs); });
-    
-        if (R_FAILED(rc = fsFsOpenDirectory(&fs, pathBuffer, FsDirOpenMode_ReadDirs, &contentDir)))
+        if (R_FAILED(rc = fsFsOpenDirectory(&this->m_fs, pathBuffer, FsDirOpenMode_ReadDirs, &contentDir)))
             return;
 
         tsl::hlp::ScopeGuard dirGuard([&] { fsDirClose(&contentDir); });
@@ -242,7 +233,7 @@ GuiMain::GuiMain() {
         for (const auto &entry : FsDirIterator(contentDir)) {
             FsFile toolboxFile;
             std::snprintf(pathBuffer, FS_MAX_PATH, toolboxJsonFormat.c_str(), FS_MAX_PATH - 35, entry.name);
-            if (R_FAILED(rc = fsFsOpenFile(&fs, pathBuffer, FsOpenMode_Read, &toolboxFile)))
+            if (R_FAILED(rc = fsFsOpenFile(&this->m_fs, pathBuffer, FsOpenMode_Read, &toolboxFile)))
                 continue;
             tsl::hlp::ScopeGuard fileGuard([&] { fsFileClose(&toolboxFile); });
 
@@ -274,18 +265,9 @@ GuiMain::GuiMain() {
             };
 
             module.listItem->setClickListener([this, module](u64 click) -> bool {
-                FsFileSystem fs;
-                fsdevMountSdmc();
-                if (R_FAILED(fsOpenSdCardFileSystem(&fs))) {
-                    fsdevUnmountDevice("sdmc");
-                    return false;
-                }
-                tsl::hlp::ScopeGuard fsdevGuard1([&] { fsdevUnmountDevice("sdmc"); });
-                tsl::hlp::ScopeGuard fsGuard1([&] { fsFsClose(&fs); });
-
                 /* if the folder "flags" does not exist, it will be created */
                 std::snprintf(pathBuffer, FS_MAX_PATH, boot2FlagFolder.c_str(), module.programId);
-                fsFsCreateDirectory(&fs, pathBuffer);
+                fsFsCreateDirectory(&this->m_fs, pathBuffer);
                 std::snprintf(pathBuffer, FS_MAX_PATH, boot2FlagFormat.c_str(), module.programId);
 
                 if (click & HidNpadButton_A && !module.needReboot) {
@@ -295,7 +277,7 @@ GuiMain::GuiMain() {
 
                         /* Remove boot2 flag file. */
                         if (this->hasFlag(module))
-                            fsFsDeleteFile(&fs, pathBuffer);
+                            fsFsDeleteFile(&this->m_fs, pathBuffer);
                     } else {
                         /* Start process. */
                         const NcmProgramLocation programLocation{
@@ -307,7 +289,7 @@ GuiMain::GuiMain() {
 
                         /* Create boot2 flag file. */
                         if (!this->hasFlag(module))
-                            fsFsCreateFile(&fs, pathBuffer, 0, FsCreateOption(0));
+                            fsFsCreateFile(&this->m_fs, pathBuffer, 0, FsCreateOption(0));
                     }
                     return true;
                 }
@@ -315,10 +297,10 @@ GuiMain::GuiMain() {
                 if (click & HidNpadButton_Y) {
                     if (this->hasFlag(module)) {
                         /* Remove boot2 flag file. */
-                        fsFsDeleteFile(&fs, pathBuffer);
+                        fsFsDeleteFile(&this->m_fs, pathBuffer);
                     } else {
                         /* Create boot2 flag file. */
-                        fsFsCreateFile(&fs, pathBuffer, 0, FsCreateOption(0));
+                        fsFsCreateFile(&this->m_fs, pathBuffer, 0, FsCreateOption(0));
                     }
                     return true;
                 }
@@ -332,6 +314,7 @@ GuiMain::GuiMain() {
 }
 
 GuiMain::~GuiMain() {
+    fsFsClose(&this->m_fs);
     nifmExit();
     smExit();
 }
@@ -643,18 +626,8 @@ tsl::elm::Element *GuiMain::createUI() {
 
 Result GuiMain::setGetIniConfig(std::string iniPath, std::string iniSection, std::string iniOption, std::string &iniValue, bool getOption) {
     Result ret = 0;
-    FsFileSystem fs;
 
     fsdevMountSdmc();
-
-    if (R_FAILED(ret = fsOpenSdCardFileSystem(&fs))) {
-        fsdevUnmountDevice("sdmc");
-        return ret;
-    }
-
-    tsl::hlp::ScopeGuard fsdevGuard1([&] { fsdevUnmountDevice("sdmc"); });
-    tsl::hlp::ScopeGuard fsGuard1([&] { fsFsClose(&fs); });
-
     simpleIniParser::Ini *ini = simpleIniParser::Ini::parseFile(iniPath);
     if (!ini) ret = 1;
     simpleIniParser::IniSection *section = ini->findSection(iniSection);
@@ -670,37 +643,28 @@ Result GuiMain::setGetIniConfig(std::string iniPath, std::string iniSection, std
             if (!(ini->writeToFile(iniPath))) ret = 4;
         }
     }
+    fsdevUnmountDevice("sdmc");
 
     return ret;
 }
 
 Result GuiMain::CopyFile(const char *srcPath, const char *destPath) {
     Result ret{0};
-    FsFileSystem fs;
-
-    fsdevMountSdmc();
-    if (R_FAILED(ret = fsOpenSdCardFileSystem(&fs))) {
-        fsdevUnmountDevice("sdmc");
-        return ret;
-    }
-
-    tsl::hlp::ScopeGuard fsdevGuard1([&] { fsdevUnmountDevice("sdmc"); });
-    tsl::hlp::ScopeGuard fsGuard1([&] { fsFsClose(&fs); });
 
     FsFile src_handle, dest_handle;
-    if (R_FAILED(ret = fsFsOpenFile(&fs, srcPath, FsOpenMode_Read, &src_handle))) return ret;
+    if (R_FAILED(ret = fsFsOpenFile(&this->m_fs, srcPath, FsOpenMode_Read, &src_handle))) return ret;
     tsl::hlp::ScopeGuard fileGuard1([&] { fsFileClose(&src_handle); });
 
     s64 size = 0;
     if (R_FAILED(ret = fsFileGetSize(&src_handle, &size))) return ret;
 
-    if (R_SUCCEEDED(fsFsOpenFile(&fs, destPath, FsOpenMode_Read, &dest_handle))) {
+    if (R_SUCCEEDED(fsFsOpenFile(&this->m_fs, destPath, FsOpenMode_Read, &dest_handle))) {
         fsFileClose(&dest_handle);
-        if (R_FAILED(ret = fsFsDeleteFile(&fs, destPath))) return ret;
-	    if (R_FAILED(ret = fsFsCreateFile(&fs, destPath, size, 0))) return ret;
+        if (R_FAILED(ret = fsFsDeleteFile(&this->m_fs, destPath))) return ret;
+	    if (R_FAILED(ret = fsFsCreateFile(&this->m_fs, destPath, size, 0))) return ret;
     }
 
-    if (R_FAILED(ret = fsFsOpenFile(&fs, destPath, FsOpenMode_Write, &dest_handle))) return ret;
+    if (R_FAILED(ret = fsFsOpenFile(&this->m_fs, destPath, FsOpenMode_Write, &dest_handle))) return ret;
     tsl::hlp::ScopeGuard fileGuard2([&] { fsFileClose(&dest_handle); });
 
     u64 bytes_read = 0;
@@ -763,21 +727,9 @@ void GuiMain::updateStatus(const SystemModule &module) {
 }
 
 bool GuiMain::hasFlag(const SystemModule &module) {
-    FsFileSystem fs;
-
-    fsdevMountSdmc();
-
-    if (R_FAILED(fsOpenSdCardFileSystem(&fs))) {
-        fsdevUnmountDevice("sdmc");
-        return false;
-    }
-
-    tsl::hlp::ScopeGuard fsdevGuard1([&] { fsdevUnmountDevice("sdmc"); });
-    tsl::hlp::ScopeGuard fsGuard1([&] { fsFsClose(&fs); });
-
     FsFile flagFile;
     std::snprintf(pathBuffer, FS_MAX_PATH, boot2FlagFormat.c_str(), module.programId);
-    Result rc = fsFsOpenFile(&fs, pathBuffer, FsOpenMode_Read, &flagFile);
+    Result rc = fsFsOpenFile(&this->m_fs, pathBuffer, FsOpenMode_Read, &flagFile);
     if (R_SUCCEEDED(rc)) {
         fsFileClose(&flagFile);
         return true;
