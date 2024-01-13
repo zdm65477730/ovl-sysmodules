@@ -368,15 +368,15 @@ tsl::elm::Element *GuiMain::createUI() {
             renderer->drawString("WifiSwitchCustomDrawerText"_tr.c_str(), false, x + 5, y + 20, 15, renderer->a(tsl::style::color::ColorDescription));
         }), 30);
         this->m_listItemWifiSwitch = new tsl::elm::ListItem("WifiSwitchListItemKey"_tr);
-        this->m_listItemWifiSwitch->setClickListener([this, wifiSwitchCatHeader](u64 click) -> bool {
+        this->m_listItemWifiSwitch->setClickListener([this](u64 click) -> bool {
             if (click == HidNpadButton_A) {
                 Result rc;
                 bool isWifiOn;
                 if (R_FAILED(rc = this->isWifiOn(isWifiOn)))
-                    wifiSwitchCatHeader->setText("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
+                    this->m_listItemWifiSwitch->setValue("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
                 else {
                     if (R_FAILED(rc = nifmSetWirelessCommunicationEnabled(!isWifiOn))) {
-                        wifiSwitchCatHeader->setText("WifiSwitchSetErrorListItemext"_tr + std::to_string(rc));
+                        this->m_listItemWifiSwitch->setValue("WifiSwitchSetErrorListItemext"_tr + std::to_string(rc));
                     }
                 }
                 if (R_FAILED(rc))
@@ -683,7 +683,7 @@ Result GuiMain::CopyFile(const char *srcPath, const char *destPath) {
 void GuiMain::update() {
     static u8 counter = 0;
 
-    if (counter++ % 20 != 0)
+    if (counter++ % 30 != 0)
         return;
     else
         counter = 0;
@@ -703,7 +703,7 @@ void GuiMain::update() {
         Result rc;
         bool isWifiOn;
         if (R_FAILED(rc = this->isWifiOn(isWifiOn)))
-            this->m_listItemWifiSwitch->setText("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
+            this->m_listItemWifiSwitch->setValue("WifiSwitchStatusCheckErrorListItemText"_tr + std::to_string(rc));
         else
             this->m_listItemWifiSwitch->setValue(isWifiOn ? "RunAndHasFlagListItemValue"_tr : "NotRunAndNoFlagListItemValue"_tr);
     }
