@@ -162,6 +162,8 @@ GuiMain::GuiMain() {
 
     if (R_FAILED(rc = fsOpenSdCardFileSystem(&this->m_fs))) return;
 
+    if (R_FAILED(rc = setsysInitialize())) return;
+
     std::string option;
     if (R_SUCCEEDED(rc = setGetIniConfig("sdmc:/config/" APPTITLE "/config.ini", APPTITLE, "powerControlEnabled", option)))
         this->m_sysmodEnabledFlags.powerControlEnabled = std::stoi(option);
@@ -207,9 +209,7 @@ GuiMain::GuiMain() {
 
     if (this->m_sysmodEnabledFlags.consoleRegionControlEnabled) {
         this->m_isTencentVersion = false;
-        if (R_FAILED(rc = setsysInitialize())) return;
         if (R_FAILED(rc = setsysGetT(&this->m_isTencentVersion))) {
-            setsysExit();
             return;
         }
     }
@@ -314,6 +314,7 @@ GuiMain::GuiMain() {
 }
 
 GuiMain::~GuiMain() {
+    setsysExit();
     fsFsClose(&this->m_fs);
     nifmExit();
     smExit();
@@ -547,35 +548,27 @@ tsl::elm::Element *GuiMain::createUI() {
             Result rc;
             if (click & HidNpadButton_X) {
                 if (this->m_isTencentVersion) return true;
-                if (R_FAILED(rc = setsysInitialize())) return false;
                 if (R_FAILED(rc = setsysSetT(true))) {
-                    setsysExit();
                     verSwitchItem->setText("VersionSwitchSetTNOKListItemValue"_tr + std::to_string(rc));
                     return false;
                 }
                 if (R_FAILED(rc = setsysSetRegionCode(SetRegion_CHN))) {
-                    setsysExit();
                     verSwitchItem->setText("VersionSwitchSetRegionCodeNOKListItemValue"_tr + std::to_string(rc));
                     return false;
                 }
-                setsysExit();
                 this->m_isTencentVersion = true;
                 verSwitchItem->setValue("VersionSwitchMainlandListItemValue"_tr);
                 return true;
             } else if (click & HidNpadButton_Y) {
                 if (!this->m_isTencentVersion) return true;
-                if (R_FAILED(rc = setsysInitialize())) return false;
                 if (R_FAILED(rc = setsysSetT(false))) {
-                    setsysExit();
                     verSwitchItem->setText("VersionSwitchSetTNOKListItemValue"_tr + std::to_string(rc));
                     return false;
                 }
                 if (R_FAILED(rc = setsysSetRegionCode(SetRegion_HTK))) {
-                    setsysExit();
                     verSwitchItem->setText("VersionSwitchSetRegionCodeNOKListItemValue"_tr + std::to_string(rc));
                     return false;
                 }
-                setsysExit();
                 this->m_isTencentVersion = false;
                 verSwitchItem->setValue("VersionSwitchInternationalListItemValue"_tr);
                 return true;
